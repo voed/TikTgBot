@@ -13,7 +13,7 @@ namespace TikTgBot;
 
 public class EventHandler:BotEventHandler
 {
-    private const string FullPattern = @".*?tiktok.com/.*?(/video/(?'video'\d{19}))|(?'vm'.*?vm.)tiktok.com/.{9}(.*?)";
+    private const string FullPattern = @"(https://)?(www\.)?(tiktok\.com/.*?(/video/(?'video'\d{19}))|(?'vm'.*?(vm\.tiktok\.com/)|(tiktok\.com/t/)).{9}(.*?).*?)";
 
     private readonly HttpClient _httpClient;
     private readonly string ApiUrl = "https://api16-normal-c-useast1a.tiktokv.com/aweme/v1/feed/?aweme_id=";
