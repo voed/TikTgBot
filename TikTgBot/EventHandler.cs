@@ -5,29 +5,48 @@ using BotFramework.Setup;
 using Newtonsoft.Json.Linq;
 using System.Net;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using Microsoft.Extensions.FileSystemGlobbing.Internal;
+using System.Net.Http;
+using System.Web;
+using ByteSizeLib;
+using Telegram.Bot.Types.InlineQueryResults;
 
 namespace TikTgBot;
 
 public class EventHandler:BotEventHandler
 {
-    private const string FullPattern = @"(https://)?(www\.)?(tiktok\.com/.*?(/video/(?'video'\d{19}))|(?'vm'.*?(vm\.tiktok\.com/)|(tiktok\.com/t/)).{9}(.*?).*?)";
+    //language=regexp
+    private const string FullPattern = @"(https://)?(www\.)?(tiktok.com/.*?(/video/(?'video'\d{19}))|m\.tiktok\.com/v/(?'video'\d{19})\.html.*?|(?'vm'.*?(vm\.tiktok\.com/)|(tiktok\.com/t/)).{9}(.*?).*?)";
+    //language=regexp
+    private const string YoutubePattern = @"(https://)?(www\.)?youtube\.com/shorts/(?'video'\w{11}).*?";
+    //language=regexp
+    private const string TiktokHtmlPattern = """
+                                             \"playAddr\"\:\"(?<url>[A-Za-z0-9\:\\\-\.\?\=\&\%_]+)"
+                                             """;
 
     private readonly HttpClient _httpClient;
-    private readonly string ApiUrl = "https://api16-normal-c-useast1a.tiktokv.com/aweme/v1/feed/?aweme_id=";
+    private string _apiUrl = "https://api22-normal-c-useast2a.tiktokv.com";
     private readonly Configuration _configuration;
+    private readonly ILogger _logger;
 
-    public EventHandler(Configuration configuration)
+    public EventHandler(Configuration configuration, ILogger<EventHandler> logger)
     {
+        _logger = logger;
         var handler = new HttpClientHandler()
         {
-            AllowAutoRedirect = false
+            AllowAutoRedirect = true
         };
         _httpClient = new HttpClient(handler);
         _configuration = configuration;
+        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(_configuration.UserAgent);
+        _apiUrl = $"{_configuration.ApiUrl}/aweme/v1/feed/";
+
     }
+
 
     [HandleCondition(ConditionType.All)]
     [Message(MessageFlag.HasEntity)]
@@ -38,17 +57,29 @@ public class EventHandler:BotEventHandler
             return;
 
         var num = 0;
-        
+        var entList = new List<string>();
         foreach (var ent in RawUpdate.Message.Entities)
         {
 
             if (ent.Type == MessageEntityType.Url)
             {
-                var url = await GetVideoLink(RawUpdate.Message.EntityValues.ElementAt(num));
-                if (!string.IsNullOrWhiteSpace(url))
+                var url = RawUpdate.Message.EntityValues.ElementAt(num);
+                var stream = await GetVideo(url);
+
+                if (stream != null)
                 {
+                    if(entList.Contains(url))
+                        continue;
+                    entList.Add(RawUpdate.Message.EntityValues.ElementAt(num));
+                    var size = ByteSize.FromBytes(stream.Length);
+                    _logger.LogInformation("File size is {size}mb", size.MegaBytes);
+                    if (size.MegaBytes > 50)
+                        continue;
                     await Bot.SendChatActionAsync(Chat.Id, ChatAction.UploadVideo);
-                    await Bot.SendVideoAsync(Chat.Id, new InputFileUrl(url), replyToMessageId: RawUpdate.Message.MessageId);
+                    var ms = new MemoryStream(stream);
+                    await Bot.SendVideoAsync(Chat.Id, new InputFile(ms), replyToMessageId: RawUpdate.Message.MessageId);
+                    await ms.DisposeAsync();
+
                 }
 
             }
@@ -56,33 +87,33 @@ public class EventHandler:BotEventHandler
         }
     }
 
-    private async Task<string?> GetVideoLink(string url)
+
+    private async Task<byte[]?> GetVideo(string url)
     {
 
         var match = Regex.Matches(url, FullPattern).FirstOrDefault();
-        if (match == null) 
+        if (match == null)
+        {
+            _logger.LogWarning("Unable to parse tiktok link: {url}", url);
             return null;
+        }
+
 
         try
         {
-            var isVm = match.Groups.Values.Any(x => x is { Success: true, Name: "vm" });
-            if (isVm)// vm.tiktok.com/... link requires to get redirect url first
-            {
-                var resp = await _httpClient.GetAsync(url);
-                return await GetVideoLink(resp.Headers.Location?.AbsoluteUri);
-            }
-            else
-            {
-                var videoId = match.Groups.Values.FirstOrDefault(x => x.Name == "video")?.Value;
-                var resp = await _httpClient.GetAsync($"{ApiUrl}{videoId}");
-                IEnumerable<dynamic> jobj = JObject.Parse(await resp.Content.ReadAsStringAsync())["aweme_list"] ?? throw new Exception();
-                var aweme = jobj?.FirstOrDefault(x => x.aweme_id == videoId && x.video.duration > 0) ?? throw new Exception();
+            _logger.LogInformation("Tiktok link: {url}", url);
+            //var videoId = match.Groups.Values.FirstOrDefault(x => x.Name == "video")?.Value;
+            var body = await _httpClient.GetStringAsync(url);
+            var dl_match = Regex.Match(body, TiktokHtmlPattern);
+            var dl_url = dl_match.Groups["url"].Value;
+            dl_url = dl_url.Replace(@"\u002F", "/");
+            _logger.LogInformation("DL link: {dl_url}", dl_url);
 
-                return (string)(aweme["video"]["play_addr"]["url_list"].First);
-            }
+            return await _httpClient.GetByteArrayAsync(HttpUtility.UrlDecode(dl_url));
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            _logger.LogError(e.ToString());
             return null;
         }
     }
