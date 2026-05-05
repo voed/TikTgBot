@@ -5,7 +5,7 @@ using System.Web;
 
 namespace TikTgBot.Services;
 
-public class TiktokIdlService(Configuration configuration, ILogger<TiktokIdlService> logger) : IDlService
+public class TiktokDlService(Configuration configuration, ILogger<TiktokDlService> logger) : IDlService
 {
     private static HttpClientHandler HttpClientHandler = new()
     {
@@ -15,13 +15,11 @@ public class TiktokIdlService(Configuration configuration, ILogger<TiktokIdlServ
     private readonly HttpClient _httpClient = new(HttpClientHandler);
 
     //language=regexp
-    private const string TiktokHtmlPattern = """
-                                             \"playAddr\"\:\"(?'url'[A-Za-z0-9\:\\\-\.\?\=\&\%_]+)"
-                                             """;
+    private const string TiktokHtmlPattern = """playAddr"\s*:\s*"(?'url'[^"]+)""";
 
 
     //private string _apiUrl = "https://api22-normal-c-useast2a.tiktokv.com";
-    public async Task<byte[]?> GetVideo(string url, ServiceType serviceType, CancellationTokenSource cts)
+    async Task<byte[]?> IDlService.GetVideo<T>(string url, ServiceType serviceType, CancellationTokenSource cts)
     {
         try
         {
@@ -42,5 +40,6 @@ public class TiktokIdlService(Configuration configuration, ILogger<TiktokIdlServ
             return null;
         }
     }
+
 
 }

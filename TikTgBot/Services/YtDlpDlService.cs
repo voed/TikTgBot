@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace TikTgBot.Services;
 
-public class YtDlpIdlService(Configuration configuration, ILogger<YtDlpIdlService> logger)
+public class YtDlpDlService(Configuration configuration, ILogger<YtDlpDlService> logger)
     : IDlService
 {
     private readonly YoutubeDL _ytdl = new()
@@ -15,7 +15,7 @@ public class YtDlpIdlService(Configuration configuration, ILogger<YtDlpIdlServic
     };
     private readonly ILogger _logger = logger;
 
-    public async Task<byte[]?> GetVideo(string url, ServiceType serviceType, CancellationTokenSource cts)
+    async Task<byte[]?> IDlService.GetVideo<T>(string url, ServiceType serviceType, CancellationTokenSource cts)
     {
         try
         {
