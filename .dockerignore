@@ -24,3 +24,8 @@
 LICENSE
 README.md
 /TikTgBot/appsettings.json
+/TikTgBot/instagram_cookies.txt
+/TikTgBot/tiktok_cookies.txt
+/.idea/*
+.editorconfig
+.gitattributes

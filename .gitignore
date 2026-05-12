@@ -365,3 +365,5 @@ FodyWeavers.xsd
 /TikTgBot/instagram_cookies.txt
 /TikTgBot/tiktok_cookies.txt
 /.idea/*
+.editorconfig
+.gitattributes
