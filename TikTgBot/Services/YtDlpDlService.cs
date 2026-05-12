@@ -17,23 +17,46 @@ public class YtDlpDlService(Configuration configuration, ILogger<YtDlpDlService>
 
     async Task<byte[]?> IDlService.GetVideo<T>(string url, ServiceType serviceType, CancellationTokenSource cts)
     {
+        var format =
+            "bv*[height=1280][width=720]+ba/" +
+            "b[height=1280][width=720]/" +
+            "bv*[height<=1280][width<=720]+ba/" +
+            "b[height<=1280][width<=720]/" +
+            "bv*+ba/b";
         try
         {
             var options = new OptionSet()
             {
+                
                 Cookies = "",
                 RestrictFilenames = true,
                 MaxFilesize = "45M",
-                MergeOutputFormat = DownloadMergeFormat.Unspecified,
                 NoPart = true,
                 ForceIPv4 = true,
-                RecodeVideo = serviceType == ServiceType.Instagram ? VideoRecodeFormat.Mp4 : VideoRecodeFormat.None,
-                AddHeaders = new MultiValue<string>("UserAgent:Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.79 Safari/537.36"),
-                ExtractorArgs = new MultiValue<string>("youtube:player-client=web,default;po_token=web+MlvNQfHZOaB7z815fmS6HMFrRUbMb0eGNOiMuFIBkm9JyEYpifZjxcTydPCvq5xXmHdn2yJaLnlukvM0K4GTmrnH7Pm1qXmqCDPF1kn254ymREH8uTHP0qc0eYIg"),
                 
-                //Format = "[filesize<45M]"
+                ExtractorArgs = new MultiValue<string>("youtube:player-client=web,default;po_token=web+MlvNQfHZOaB7z815fmS6HMFrRUbMb0eGNOiMuFIBkm9JyEYpifZjxcTydPCvq5xXmHdn2yJaLnlukvM0K4GTmrnH7Pm1qXmqCDPF1kn254ymREH8uTHP0qc0eYIg"),
 
             };
+            if (serviceType != ServiceType.TikTok)
+            {
+                options.Format = format;
+            }
+
+            switch (serviceType)
+            {
+                case ServiceType.TikTok:
+                    break;
+                case ServiceType.Instagram:
+                    options.MergeOutputFormat = DownloadMergeFormat.Mp4;
+
+                    options.AddHeaders = new MultiValue<string>(
+                        "User-Agent:Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) " +
+                        "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 " +
+                        "Mobile/15E148 Safari/604.1"
+                    );
+                    break;
+            }
+
             options.Cookies = serviceType switch
             {
                 ServiceType.Instagram => configuration.Cookies.Instagram,

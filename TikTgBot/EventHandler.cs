@@ -46,7 +46,37 @@ public class EventHandler(Configuration configuration, ILogger<EventHandler> log
         await ProcessVideo(ServiceType.YtShort);
     }
 
+    private static async Task<T> RetryAsync<T>(
+        Func<Task<T>> action,
+        int retries,
+        TimeSpan delay,
+        CancellationToken cancellationToken)
+    {
+        Exception? lastException = null;
 
+        for (var attempt = 0; attempt <= retries; attempt++)
+        {
+            try
+            {
+                return await action();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                lastException = ex;
+
+                if (attempt == retries)
+                    break;
+
+                await Task.Delay(delay, cancellationToken);
+            }
+        }
+
+        throw lastException!;
+    }
     public async Task ProcessVideo(ServiceType serviceType)
     {
         if (!configuration.Chats.Contains(Chat.Id))
@@ -55,14 +85,18 @@ public class EventHandler(Configuration configuration, ILogger<EventHandler> log
         foreach (var url in GetUrls(RawUpdate.Message).Select(ent => ent.Value))
         {
             var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+
             var stream = serviceType switch
             {
                 ServiceType.YtShort or ServiceType.Instagram => 
                     await dlService.GetVideo<YtDlpDlService>(url, serviceType, cts),
 
-                ServiceType.TikTok =>
-                    //(await dlService.GetVideo<TiktokDlService>(url, serviceType, cts)) ??
-                        await dlService.GetVideo<YtDlpDlService>(url, serviceType, cts),
+                ServiceType.TikTok => await RetryAsync(
+                    () => dlService.GetVideo<YtDlpDlService>(url, serviceType, cts),
+                    retries: 2,
+                    delay: TimeSpan.FromSeconds(3),
+                    cancellationToken: cts.Token
+                ),
 
                 _ => null
             };
@@ -76,9 +110,12 @@ public class EventHandler(Configuration configuration, ILogger<EventHandler> log
             logger.LogInformation("File size is {size:F}mb", size.MegaBytes);
             if (size.MegaBytes > 50)
                 continue;
-            await Bot.SendChatActionAsync(Chat.Id, ChatAction.UploadVideo, cancellationToken: cts.Token);
+            await Bot.SendChatAction(Chat.Id, ChatAction.UploadVideo, cancellationToken: cts.Token);
             using var ms = new MemoryStream(stream);
-            await Bot.SendVideoAsync(Chat.Id, new InputFile(ms), replyToMessageId: RawUpdate.Message.MessageId, cancellationToken: cts.Token);
+            await Bot.SendVideo(Chat.Id, video: InputFile.FromStream(ms), 
+                    replyParameters: new ReplyParameters {MessageId = RawUpdate.Message.MessageId}, 
+                    cancellationToken: cts.Token
+                );
             return;
         }
         

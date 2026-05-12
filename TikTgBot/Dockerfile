@@ -4,9 +4,13 @@ FROM mcr.microsoft.com/dotnet/runtime:10.0-alpine AS base
 WORKDIR /app
 
 
-RUN apk add \
+RUN apk add --no-cache \
     ffmpeg \
-    yt-dlp
+    python3 \
+    py3-pip \
+    ca-certificates
+
+RUN pip3 install --break-system-packages -U "yt-dlp[default,curl-cffi]"
 
 RUN ffmpeg -version
 RUN yt-dlp --version

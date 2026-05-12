@@ -25,6 +25,7 @@ public class TiktokDlService(Configuration configuration, ILogger<TiktokDlServic
         {
             _httpClient.DefaultRequestHeaders.UserAgent.Clear();
             _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(configuration.UserAgent);
+            _httpClient.DefaultRequestHeaders.Add("UserAgent", configuration.UserAgent);
             logger.LogInformation("Tiktok link: {url}", url);
             var body = await _httpClient.GetStringAsync(url);
             var match = Regex.Match(body, TiktokHtmlPattern);
